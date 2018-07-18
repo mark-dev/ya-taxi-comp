@@ -4,19 +4,22 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.regex.Pattern;
 
-public class First {
+public class PointGroup {
     private static final boolean DEBUG = false;
-    private static final String FILENAME = "1/input_big.txt";
+    private static final String FILENAME = "input.txt";
 
     private static final Pattern SPACE_PATTERN = Pattern.compile(" ");
 
     private static void answer(int count) {
         System.out.println(count);
+        System.exit(0);
     }
 
     private static TreeSet<Integer> parseSpaceDelimString(String s) {
         //Можно было бы написать в функциональном стиле, но "прогрев" Stream классов занимает много времени
         //Ибо нужно кучу классов загрузить
+        if (s.isEmpty())
+            return new TreeSet<>();
         String[] split = SPACE_PATTERN.split(s);
         TreeSet<Integer> aset = new TreeSet<>();
         for (String n : split) {
@@ -46,15 +49,18 @@ public class First {
             } else if (allLines.size() == 1) {
                 answer(0);
             } else {
-                System.out.println("Unknown file format");
+//                System.out.println("Unknown file format");
+                answer(0);
             }
         } else {
-            System.out.println("File not found");
+//            System.out.println("File not found");
+            answer(0);
         }
         if (DEBUG) {
             long takes = System.currentTimeMillis() - before;
             System.out.println("Takes " + takes + " ms");
         }
+
     }
 
     private static boolean reachable(Integer o1, Integer o2, int r) {
@@ -62,6 +68,12 @@ public class First {
     }
 
     private static int straightMode(TreeSet<Integer> points, int r) {
+        if (points.isEmpty())
+            return 0;
+
+        if (points.size() == 1)
+            return 1;
+
         //Предыдущая
         Integer prev = null; //Предыдущая точка в процессе итерации
         Integer leftBound = null; //Левая граница - это самая "левая" точка, которая еще "не покрыта" ключевой точкой
@@ -86,7 +98,9 @@ public class First {
                     leftBound = reachable(prev, i, r) ? null : i;
                 }
             } else {
-                leftBound = i;
+                //Левую границу переназначем только в случае, если эта точка недостижима из последней ключевой
+                if (keyPoints.isEmpty() || !reachable(keyPoints.last(), i, r))
+                    leftBound = i;
             }
 
             if (DEBUG)
@@ -95,13 +109,15 @@ public class First {
             prev = i;
         }
         //Для последней итерации особые условия - проверяем, дотягиваемся ли мы из своей последней ключевой точки, до последней точки в наборе
-        if (!reachable(keyPoints.last(), prev, r)) {
+        if (keyPoints.isEmpty() || !reachable(keyPoints.last(), prev, r)) {
+            //Первый вариант может быть тогда, когда мы дотягивались до всех точек в процессе итерации
             keyPoints.add(prev);
         }
+
         return keyPoints.size();
     }
 
-
+    //Альтернативный вариант расчета, оч долгий, не пройдет за требуемое время
     private static int precalcMode(TreeSet<Integer> points, int r) {
         //Массив содержащий все точки, и какие точки из них могут быть достигнуты с заданным R
         ArrayList<CorePointDTO> calculatedPoints = new ArrayList<>(points.size());

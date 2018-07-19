@@ -5,7 +5,11 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 public class PointGroup {
-    private static final boolean DEBUG = false;
+    private static final boolean DEBUG_PRINT = false;
+
+    //Реализовал два алгоритма, выбор - с помощью переменной
+    private static final boolean PRECALC_MODE = false;
+    //Из какого файла читать
     private static final String FILENAME = "input.txt";
 
     private static final Pattern SPACE_PATTERN = Pattern.compile(" ");
@@ -15,14 +19,15 @@ public class PointGroup {
         System.exit(0);
     }
 
-    private static TreeSet<Integer> parseSpaceDelimString(String s) {
+    private static TreeSet<Integer> parseIntSpaceDelimString(String s) {
         //Можно было бы написать в функциональном стиле, но "прогрев" Stream классов занимает много времени
-        //Ибо нужно кучу классов загрузить
+        //Ибо нужно кучу классов загрузить - запускается у них там наверное 1 раз, так что попытаемся на этом съэкономить время
         if (s.isEmpty())
             return new TreeSet<>();
         String[] split = SPACE_PATTERN.split(s);
         TreeSet<Integer> aset = new TreeSet<>();
         for (String n : split) {
+            //Ничего не обрабатываем, вход должен быть корректным
             aset.add(Integer.parseInt(n));
         }
         return aset;
@@ -35,28 +40,31 @@ public class PointGroup {
             List<String> allLines = Files.readAllLines(f.toPath());
             //Считываем файл, извлекаем строки
             if (allLines.size() == 2) {
+                //Разбираем заголовок
                 String header = allLines.get(0);
                 String[] headerVars = SPACE_PATTERN.split(header);
-                //Общее кол-во, особо не нужно ибо парсим всю строку
+                //Общее кол-во, особо не нужно ибо парсим всю строку, считаем что вход корректный
                 int totalCount = Integer.parseInt(headerVars[0]);
                 int r = Integer.parseInt(headerVars[1]);
 
                 //Извлекли точки причем оставляем только уникальные
-                TreeSet<Integer> points = parseSpaceDelimString(allLines.get(1));
-//                int result = precalcMode(points,r);
-                int result = straightMode(points, r);
+                TreeSet<Integer> points = parseIntSpaceDelimString(allLines.get(1));
+                //Выполняем алгоритм в зависимости от настроек
+                int result = PRECALC_MODE ? precalcMode(points, r) : straightMode(points, r);
                 answer(result);
             } else if (allLines.size() == 1) {
+                //Нет точек
                 answer(0);
             } else {
-//                System.out.println("Unknown file format");
+                //Не известный формат файла
                 answer(0);
             }
         } else {
-//            System.out.println("File not found");
+            //Файл не найден
             answer(0);
         }
-        if (DEBUG) {
+
+        if (DEBUG_PRINT) {
             long takes = System.currentTimeMillis() - before;
             System.out.println("Takes " + takes + " ms");
         }
@@ -67,17 +75,21 @@ public class PointGroup {
         return Math.abs(o1 - o2) <= r;
     }
 
+    //Правильный, быстрый алгоритм, за 1 проход
     private static int straightMode(TreeSet<Integer> points, int r) {
+
+        //Вырожденные случаи, не понятно что там на вход подается, наверника и такое есть
         if (points.isEmpty())
             return 0;
 
         if (points.size() == 1)
             return 1;
 
-        //Предыдущая
         Integer prev = null; //Предыдущая точка в процессе итерации
         Integer leftBound = null; //Левая граница - это самая "левая" точка, которая еще "не покрыта" ключевой точкой
+        //Это те ключевые точки которые мы выбрали в процессе работы алгоритма
         TreeSet<Integer> keyPoints = new TreeSet<>();
+
         //Точки отсортированны, проходимся по ним
         for (Integer i : points) {
 
@@ -91,23 +103,25 @@ public class PointGroup {
                 if (!canBeReached) {
 
                     keyPoints.add(prev);
-                    //Нужно переназначить левую границу:
+                    //Появилась новая ключевая точка, значит нужно переназначить левую границу:
                     //вопрос в чем - можем ли мы дотянутся из последней ключевой точки(это prev мы ее только что добавили) до ТЕКУЩЕЙ?
                     //Если можем - значит левую границу следует устанавливать на следующей итерации, а если не можем - то левая граница это текущая точка
-                    //
                     leftBound = reachable(prev, i, r) ? null : i;
                 }
             } else {
+                //Такое может быть если это первая итерация, или если мы не стали переназначать левую границу в if-е выше
+
                 //Левую границу переназначем только в случае, если эта точка недостижима из последней ключевой
                 if (keyPoints.isEmpty() || !reachable(keyPoints.last(), i, r))
                     leftBound = i;
             }
 
-            if (DEBUG)
+            if (DEBUG_PRINT)
                 System.out.printf("i: %d , prev: %d , leftBound: %d(reached: %s), kp: %s \n", i, prev, leftBound, canBeReached, keyPoints);
 
             prev = i;
         }
+
         //Для последней итерации особые условия - проверяем, дотягиваемся ли мы из своей последней ключевой точки, до последней точки в наборе
         if (keyPoints.isEmpty() || !reachable(keyPoints.last(), prev, r)) {
             //Первый вариант может быть тогда, когда мы дотягивались до всех точек в процессе итерации
@@ -125,34 +139,41 @@ public class PointGroup {
         //Считаем расстояние от всех точек до всех точек и сохраняем
         for (Integer i : points) {
 
-            //К слову, они же отсортированны будут в Set.. мб можно оптимизировать как-то?
-            //Грубо говоря как-только первый раз не удалось посчитать расстояние - то все, дальше можно не считать, ибо расстояние только расти будет
 
+            //Это список точек, которые достижимы из i-ой точки
             TreeSet<Integer> reachedPoints = new TreeSet<>();
+
+            //Поскольку они отсортированы, можем оптимизировать расчет
             Boolean prevState = null;
             for (Integer j : points) {
+                //Суть в чем - как только у нас произошло измение с ДОСТИЖИМО на НЕ достижимо - можно останавливатся
+                //дальше уже лучше не будет, ибо идем от меньшего к большему
                 boolean canBeReached = Math.abs(j - i) <= r;
                 if (canBeReached) reachedPoints.add(j);
                 if (prevState != null && prevState && !canBeReached)
                     break;
                 prevState = canBeReached;
             }
+            //Сохраняем DTO
             CorePointDTO dto = new CorePointDTO(i, reachedPoints);
             calculatedPoints.add(dto);
         }
-        //  System.out.println("Queue:" + calculatedPoints);
+
+        if (DEBUG_PRINT)
+            System.out.println("Queue:" + calculatedPoints);
 
         //Ответ наш
         int ctx = 0;
 
-        //Пока не найдем достаточное кол-во точек - итерируем, исходим из того, что ответ есть полюбому
+        //Продолжаем пока не покроем все точки, исходим из того, что ответ есть полюбому
 
         while (!points.isEmpty()) {
             //Ищем лучшего кандидата
             CorePointDTO bestCandidate = null;
             int bestCandidateMatch = 0;
 
-            //Проходимся по всем точкам
+            //Проходимся по всем точкам и ищем какая точка лучше всего нам подойдет
+
             //По сути заново изобрел этот жадный алгоритм
             //https://ru.m.wikipedia.org/wiki/Задача_о_покрытии_множества
             for (CorePointDTO dto : calculatedPoints) {
@@ -174,13 +195,17 @@ public class PointGroup {
             }
 
             //Добавляем в результат
-            System.out.println("Best candidate: " + bestCandidate + " \t Match: " + bestCandidateMatch);
+            if (DEBUG_PRINT)
+                System.out.println("Best candidate: " + bestCandidate + " \t Match: " + bestCandidateMatch);
+
+            //Т.к. мы покрыли эти точки - мы их удаляем из нашего списка
             points.removeAll(bestCandidate.hasGoodDistance);
             ctx++;
         }
         return ctx;
     }
 
+    //DTO для алгоритма с предрасчетом, точка и список достижимых точек для нее
     static class CorePointDTO {
         int value; //Значение точки
         Set<Integer> hasGoodDistance; //Какие точки достижимы с заданным R из этой точки
